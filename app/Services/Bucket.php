@@ -199,4 +199,29 @@ class Bucket
             default => 'bin',
         };
     }
+
+    public function resolveDeletePath(?string $folder, string $file): ?string
+    {
+        // security: block traversal
+        if (str_contains($file, '..')) {
+            return null;
+        }
+
+        $folder = trim((string) $folder, '/');
+        $file = trim($file, '/');
+
+        // case 1: full path passed in file
+        if ($folder === '' && str_contains($file, '/')) {
+            return $file;
+        }
+
+        // case 2: normal folder + filename
+        if ($folder !== '' && !str_contains($file, '/')) {
+            return "{$folder}/{$file}";
+        }
+
+        // everything else is invalid
+        return null;
+    }
+
 }

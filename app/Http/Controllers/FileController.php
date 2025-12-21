@@ -43,9 +43,12 @@ class FileController extends Controller
     {
         $input = $request->validate([
             'files' => 'required|array|min:1',
-            'files.*' => 'file|max:10240',
+            'files.*' => 'file|max:51200', // max 50 MB
             'folder' => 'required|string',
             'meta' => 'nullable|array',
+            'meta.*.name' => 'nullable|string|max:150',
+        ], [
+            'files.required' => 'Files not selected',
         ]);
         try {
             $stored = [];
@@ -57,11 +60,16 @@ class FileController extends Controller
             foreach ($request->file('files') as $index => $file) {
                 $meta = $request->input("meta.{$index}", []);
 
-                $filename = $bucket->generateFilename(
-                    $file,
-                    $meta['prefix'] ?? '',
-                    $meta['suffix'] ?? ''
-                );
+                if (!empty($meta['name'])) {
+                    // explicit name: overwrite allowed
+                    $filename = trim($meta['name'], '/');
+                } else {
+                    $filename = $bucket->generateFilename(
+                        $file,
+                        $meta['prefix'] ?? '',
+                        $meta['suffix'] ?? ''
+                    );
+                }
 
                 $mime = $file->getMimeType();
                 $canCrop = $bucket->canCrop($mime);
@@ -144,7 +152,7 @@ class FileController extends Controller
             $data = validator(
                 ['folder' => $folder, 'files' => $files],
                 [
-                    'folder' => 'required|string',
+                    'folder' => 'nullable|string',
                     'files' => 'required|array|min:1',
                     'files.*' => 'required|string',
                 ]
@@ -153,21 +161,16 @@ class FileController extends Controller
             $fs = Storage::disk('uploads');
             $results = [];
             foreach ($data['files'] as $file) {
-                // security: no traversal
-                if (
-                    str_contains($file, '..') ||
-                    str_contains($file, '/') ||
-                    str_contains($file, '\\')
-                ) {
+                $path = $bucket->resolveDeletePath($folder, $file);
+                if (!$path) {
                     $results[] = [
                         'file' => $file,
                         'deleted' => false,
-                        'error' => 'Invalid filename',
+                        'error' => 'Invalid path',
                     ];
                     continue;
                 }
 
-                $path = "{$folder}/{$file}";
                 if (!$fs->exists($path)) {
                     $results[] = [
                         'file' => $file,
