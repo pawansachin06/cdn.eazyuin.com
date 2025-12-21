@@ -13,6 +13,9 @@ return [
     | a conventional file to locate the various service credentials.
     |
     */
+    'bucket' => [
+        'secret' => env('BUCKET_SECRET', ''),
+    ],
 
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),

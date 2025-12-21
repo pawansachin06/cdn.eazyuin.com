@@ -9,3 +9,4 @@ Route::get('/user', function (Request $request) {
 })->middleware('auth:sanctum');
 
 Route::post('v1/uploads', [FileController::class, 'apiStore']);
+Route::delete('v1/uploads', [FileController::class, 'apiDelete']);

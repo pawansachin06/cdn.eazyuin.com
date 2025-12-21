@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use Exception;
+use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -24,6 +26,52 @@ class Bucket
         /** @var \Illuminate\Filesystem\FilesystemAdapter $fs */
         $fs = Storage::disk('uploads');
         return $fs->url($path);
+    }
+
+    public function authenticate(Request $request)
+    {
+        $token = $request->header('x-token');
+        try {
+            $ttl = 300; // 5 minutes
+            $secret = config('services.bucket.secret');
+            if (empty($secret)) {
+                return null; // no secret so no check
+            }
+
+            if (!$token) {
+                return 'Token missing';
+            }
+
+            $decoded = base64_decode($token, true);
+            if (!$decoded || !str_contains($decoded, '.')) {
+                return 'Invalid token';
+            }
+
+            [$payload, $signature] = explode('.', $decoded, 2);
+            $expected = hash_hmac('sha256', $payload, $secret);
+            if (!hash_equals($expected, $signature)) {
+                return 'Invalid signature';
+            }
+
+            $data = json_decode($payload, true);
+            if (!$data || !isset($data['ts'])) {
+                return 'Invalid payload';
+            }
+
+            // prevent replay attacks
+            if (abs(time() - $data['ts']) > $ttl) {
+                return 'Token expired';
+            }
+
+            // app check
+            if (($data['app'] ?? null) !== 'eazyuin') {
+                return 'Invalid app';
+            }
+
+            return null;
+        } catch (Exception $e) {
+            return $e->getMessage();
+        }
     }
 
     public function generateFilename(
