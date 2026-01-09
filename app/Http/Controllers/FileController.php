@@ -182,6 +182,9 @@ class FileController extends Controller
 
                 try {
                     $fs->delete($path);
+                    // $path = ltrim($path, '/');
+                    // $fullPath = public_path("uploads/$path");
+                    // unlink($fullPath);
                     $results[] = [
                         'file' => $file,
                         'deleted' => true,

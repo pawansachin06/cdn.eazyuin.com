@@ -43,6 +43,8 @@ return [
             'root' => public_path('uploads'),
             'url' => env('APP_URL') . '/uploads',
             'visibility' => 'public',
+            'throw' => true,
+            'report' => true,
         ],
 
         'public' => [
