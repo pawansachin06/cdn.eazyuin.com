@@ -71,10 +71,12 @@ class FileController extends Controller
                     );
                 }
 
+                $type = $file->getType();
                 $mime = $file->getMimeType();
                 $canCrop = $bucket->canCrop($mime);
                 $width = isset($meta['width']) ? (int) $meta['width'] : null;
                 $height = isset($meta['height']) ? (int) $meta['height'] : null;
+                $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION) ?? '');
 
                 if ($width > 0 && $height > 0 && $canCrop) {
                     // crop
@@ -94,9 +96,12 @@ class FileController extends Controller
                 $url = $bucket->url($path);
                 $cropped = $width && $height && $canCrop;
                 $stored[] = [
+                    'extension' => $extension,
                     'cropped' => $cropped,
                     'folder' => $folder,
                     'name' => $filename,
+                    'type' => $type,
+                    'mime' => $mime,
                     'url' => $url,
                 ];
             }
