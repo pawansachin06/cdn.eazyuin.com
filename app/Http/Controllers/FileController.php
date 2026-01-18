@@ -180,11 +180,19 @@ class FileController extends Controller
                     continue;
                 }
 
+                $folderPattern = '#^products/\d{4}/\d{2}(/.*)?$#';
+
                 try {
-                    $fs->delete($path);
-                    // $path = ltrim($path, '/');
-                    // $fullPath = public_path("uploads/$path");
-                    // unlink($fullPath);
+                    // check if director
+                    if (
+                        $fs->directoryExists($path) &&
+                        preg_match($folderPattern, $path)
+                    ) {
+                        $fs->deleteDirectory($path);
+                    } else {
+                        $fs->delete($path);
+                    }
+
                     $results[] = [
                         'file' => $file,
                         'deleted' => true,
@@ -197,7 +205,7 @@ class FileController extends Controller
                     $results[] = [
                         'file' => $file,
                         'deleted' => false,
-                        'error' => 'Delete failed',
+                        'error' => $e->getMessage(),
                     ];
                 }
             }
