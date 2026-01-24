@@ -28,6 +28,24 @@ class Bucket
         return $fs->url($path);
     }
 
+    public function crypt($data, $encrypt = true) {
+        static $key = 'secreteazyuincom'; // 16 chars
+        if ($encrypt) {
+            // 1. Bitwise XOR
+            $output = $data ^ str_repeat($key, (strlen($data) / 16) + 1);
+            // 2. Encode & make URL-safe
+            return str_replace(['+', '/', '='], ['-', '_', ''], base64_encode($output));
+        } else {
+            // 1. Undo URL-safe characters
+            $data = str_replace(['-', '_'], ['+', '/'], $data);
+            // 2. Decode
+            $decoded = base64_decode($data);
+            if ($decoded === false) return '';
+            // 3. Bitwise XOR to get original string back
+            return $decoded ^ str_repeat($key, (strlen($decoded) / 16) + 1);
+        }
+    }
+
     public function authenticate(Request $request)
     {
         $token = $request->header('x-token');

@@ -9,6 +9,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
 use Intervention\Image\Drivers\Gd\Driver;
 use Intervention\Image\ImageManager;
 use Throwable;
@@ -233,5 +235,52 @@ class FileController extends Controller
     public function destroy(File $file)
     {
         //
+    }
+
+    private function dummy(int $hours = 2)
+    {
+        $ttl = $hours * 3600;
+        $dummyImage = public_path('uploads/img/placeholder/360.png');
+        return response()->file($dummyImage, [
+            'Content-Type'  => 'image/png',
+            'Cache-Control' => 'public, max-age=' . $ttl,
+        ]);
+    }
+
+    public function external(Request $request, string $hash)
+    {
+        $bucket = Bucket::instance();
+        $url = $bucket->crypt($hash, false);
+
+        if (!$url || !filter_var($url, FILTER_VALIDATE_URL)) {
+            return $this->dummy(2);
+        }
+
+        try {
+            $response = Http::timeout(5)->get($url);
+        } catch (Throwable $e) {
+            Log::warning('EXTERNAL-TIMEOUT', ['url' => $url]);
+            return $this->dummy(4);
+        }
+
+        if (!$response->successful()) {
+            return $this->dummy($response->status() === 404 ? 2 : 4);
+        }
+
+        $body = $response->body();
+        if (strlen($body) > 2_000_000) {
+            return $this->dummy(4);
+        }
+
+        $mime = finfo_buffer(finfo_open(FILEINFO_MIME_TYPE), $body);
+        if (!str_starts_with($mime, 'image/')) {
+            Log::warning('NOT-IMAGE', ['url' => $url, 'mime' => $mime]);
+            return $this->dummy(4);
+        }
+
+        return response($body, 200)
+            ->header('Content-Type', $mime)
+            ->header('Cache-Control', 'public, max-age=604800, immutable')
+            ->header('Surrogate-Control', 'max-age=604800');
     }
 }
