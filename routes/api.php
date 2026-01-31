@@ -4,9 +4,11 @@ use App\Http\Controllers\FileController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/user', function (Request $request) {
+Route::get('api/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
-Route::post('v1/uploads', [FileController::class, 'apiStore']);
-Route::delete('v1/uploads', [FileController::class, 'apiDelete']);
+Route::get('external/{hash}', [FileController::class, 'external']);
+
+Route::post('api/v1/uploads', [FileController::class, 'apiStore']);
+Route::delete('api/v1/uploads', [FileController::class, 'apiDelete']);

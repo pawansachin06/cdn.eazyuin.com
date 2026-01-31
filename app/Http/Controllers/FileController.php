@@ -257,9 +257,10 @@ class FileController extends Controller
         }
 
         try {
-            $response = Http::timeout(5)->get($url);
+            $response = Http::timeout(10)->get($url);
         } catch (Throwable $e) {
-            Log::warning('EXTERNAL-TIMEOUT', ['url' => $url]);
+            $msg = $e->getMessage();
+            Log::warning('ERR', ['url' => $url, 'msg' => $msg]);
             return $this->dummy(4);
         }
 
