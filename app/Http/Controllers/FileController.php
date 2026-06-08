@@ -43,45 +43,64 @@ class FileController extends Controller
 
     public function apiStore(Request $request)
     {
+        $bucket = Bucket::instance();
+        $authError = $bucket->authenticate($request);
+
+        if ($authError) {
+            return response()->json([
+                'success' => false,
+                'message' => $authError,
+            ], 401);
+        }
+
         $input = $request->validate([
             'files' => 'required|array|min:1',
-            'files.*' => 'file|max:51200', // max 50 MB
-            'folder' => 'required|string',
+            'files.*' => 'file|max:51200',
+            'folder' => 'required|string|max:250',
             'meta' => 'nullable|array',
             'meta.*.name' => 'nullable|string|max:150',
+            'meta.*.prefix' => 'nullable|string|max:80',
+            'meta.*.suffix' => 'nullable|string|max:80',
+            'meta.*.width' => 'nullable|integer|min:1|max:5000',
+            'meta.*.height' => 'nullable|integer|min:1|max:5000',
         ], [
             'files.required' => 'Files not selected',
         ]);
+
         try {
             $stored = [];
-            $bucket = Bucket::instance();
-            $folder = trim($input['folder'], '/');
+            $folder = $bucket->sanitizeFolder((string) $input['folder']);
+
+            if ($folder === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid folder.',
+                ], 422);
+            }
 
             $imageManager = new ImageManager(new Driver());
 
             foreach ($request->file('files') as $index => $file) {
                 $meta = $request->input("meta.{$index}", []);
 
-                if (!empty($meta['name'])) {
-                    // explicit name: overwrite allowed
-                    $filename = trim($meta['name'], '/');
+                if (! empty($meta['name'])) {
+                    $filename = $bucket->sanitizeFilename((string) $meta['name'], $file);
                 } else {
                     $filename = $bucket->generateFilename(
                         $file,
-                        $meta['prefix'] ?? '',
-                        $meta['suffix'] ?? ''
+                        (string) ($meta['prefix'] ?? ''),
+                        (string) ($meta['suffix'] ?? '')
                     );
                 }
 
+                $mime = $file->getMimeType() ?: 'application/octet-stream';
                 $type = $file->getType();
-                $mime = $file->getMimeType();
-                $canCrop = $bucket->canCrop($mime);
                 $width = isset($meta['width']) ? (int) $meta['width'] : null;
                 $height = isset($meta['height']) ? (int) $meta['height'] : null;
-                $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION) ?? '');
+                $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION) ?: $bucket->extensionFromMime($mime));
+                $canCrop = $bucket->canCrop($mime);
 
                 if ($width > 0 && $height > 0 && $canCrop) {
-                    // crop
                     $path = $bucket->cropAndStore(
                         $imageManager,
                         $file,
@@ -91,30 +110,38 @@ class FileController extends Controller
                         $height
                     );
                 } else {
-                    // normal store
                     $path = $file->storeAs($folder, $filename, 'uploads');
                 }
 
-                $url = $bucket->url($path);
-                $cropped = $width && $height && $canCrop;
                 $stored[] = [
                     'extension' => $extension,
-                    'cropped' => $cropped,
+                    'cropped' => (bool) ($width && $height && $canCrop),
                     'folder' => $folder,
                     'name' => $filename,
+                    'path' => $path,
                     'type' => $type,
                     'mime' => $mime,
-                    'url' => $url,
+                    'size' => $file->getSize(),
+                    'url' => $bucket->url($path),
                 ];
             }
+
             return response()->json([
+                'success' => true,
                 'item' => $stored[0] ?? null,
-                'items' => $stored
+                'items' => $stored,
             ], 201);
-        } catch (Exception $e) {
-            $msg = $e->getMessage();
-            Log::error("UPLOAD: $msg", $e->getTrace());
-            return response()->json(['message' => $msg], 500);
+        } catch (Throwable $e) {
+            Log::error('CDN-UPLOAD-FAILED', [
+                'message' => $e->getMessage(),
+                'folder' => $request->input('folder'),
+                'files_count' => is_array($request->file('files')) ? count($request->file('files')) : 0,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 500);
         }
     }
 
